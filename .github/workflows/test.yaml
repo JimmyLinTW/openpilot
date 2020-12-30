@@ -12,13 +12,14 @@ env:
   CI_RUN: docker run -e GITHUB_ACTION -e GITHUB_REF -e GITHUB_HEAD_REF -e GITHUB_SHA -e GITHUB_REPOSITORY -e GITHUB_RUN_ID --rm tmppilotci /bin/bash -c
   UNIT_TEST: coverage run --append -m unittest discover
   REGISTRY_BASE: ghcr.io/commaai/openpilot
+  DOCKER_LOGIN: docker login ghcr.io -u adeebshihadeh -p ${{ secrets.CONTAINER_TOKEN }}
   BUILD: |
       docker pull $(grep -ioP '(?<=^from)\s+\S+' Dockerfile.openpilot_base) || true
-      docker pull docker.io/commaai/openpilot-base:latest || true
-      docker build --cache-from docker.io/commaai/openpilot-base:latest -t commaai/openpilot-base:latest -f Dockerfile.openpilot_base .
+      docker pull $REGISTRY_BASE/openpilot-base:latest || true
+      docker build --cache-from $REGISTRY_BASE/openpilot-base:latest -t commaai/openpilot-base:latest -f Dockerfile.openpilot_base .
 
-      docker pull docker.io/commaai/openpilotci:latest || true
-      docker build --cache-from docker.io/commaai/openpilotci:latest -t tmppilot -f Dockerfile.openpilotci .
+      docker pull $REGISTRY_BASE/openpilotci:latest || true
+      docker build --cache-from $REGISTRY_BASE/openpilotci:latest -t tmppilot -f Dockerfile.openpilotci .
 
 jobs:
   build_release:
@@ -88,14 +89,14 @@ jobs:
         submodules: true
     - name: Build Docker image
       run: |
-        docker pull docker.io/commaai/openpilotwebcamci:latest
-        docker build --cache-from docker.io/commaai/openpilotwebcamci:latest -t tmppilotwebcam -f tools/webcam/Dockerfile .
+        docker pull $REGISTRY_BASE/openpilotwebcamci:latest
+        docker build --cache-from $REGISTRY_BASE/openpilotwebcamci:latest -t tmppilotwebcam -f tools/webcam/Dockerfile .
     - name: Build openpilot
       run: docker run --shm-size 1G --rm tmppilotwebcam /bin/sh -c "cd /tmp/openpilot && USE_WEBCAM=1 scons -j$(nproc)"
     - name: Push to container registry
       #if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request' && github.repository == 'commaai/openpilot'
       run: |
-          docker login ghcr.io -u adeebshihadeh -p ${{ secrets.CONTAINER_TOKEN }}
+          $DOCKER_LOGIN
           docker tag tmppilotwebcam $REGISTRY_BASE/openpilotwebcamci:latest
           docker push $REGISTRY_BASE/openpilotwebcamci:latest
 
@@ -111,9 +112,9 @@ jobs:
           submodules: true
       - name: Build Docker image
         run: eval "$BUILD"
-      - name: Push to dockerhub
+      - name: Push to container registry
         run: |
-          docker login ghcr.io -u adeebshihadeh -p ${{ secrets.CONTAINER_TOKEN }}
+          $DOCKER_LOGIN
           docker tag commaai/openpilot-base:latest $REGISTRY_BASE/openpilot-base:latest
           docker push $REGISTRY_BASE/openpilot-base:latest
           docker tag tmppilot $REGISTRY_BASE/openpilotci:latest
@@ -134,7 +135,7 @@ jobs:
       - name: Push to dockerhub
         run: |
           docker login -u wmelching -p ${{ secrets.COMMA_DOCKERHUB_TOKEN}}
-          docker tag tmppilot docker.io/commaai/openpilot:latest
+          docker tag tmppilot commaai/openpilot:latest
           docker push docker.io/commaai/openpilot:latest
 
   static_analysis:
