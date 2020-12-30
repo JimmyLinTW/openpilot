@@ -6,20 +6,17 @@ on:
   pull_request:
 
 env:
-  RUN: docker run --shm-size 1G --rm tmppilot /bin/sh -c
-  PERSIST_WITH_CACHE: docker run --shm-size 1G -v /tmp/comma_download_cache:/tmp/comma_download_cache  --name tmppilot tmppilot /bin/sh -c
-  PERSIST: docker run --shm-size 1G --name tmppilot tmppilot /bin/sh -c
-  CI_RUN: docker run -e GITHUB_ACTION -e GITHUB_REF -e GITHUB_HEAD_REF -e GITHUB_SHA -e GITHUB_REPOSITORY -e GITHUB_RUN_ID --rm tmppilotci /bin/bash -c
+  RUN: docker run -v ../openpilot:/tmp/openpilot --shm-size 1G --rm tmppilot /bin/sh -c
+  PERSIST_WITH_CACHE: docker run --shm-size 1G -v ../openpilot:/tmp/openpilot -v /tmp/comma_download_cache:/tmp/comma_download_cache  --name tmppilot tmppilot /bin/sh -c
+  PERSIST: docker run -v ../openpilot:/tmp/openpilot --shm-size 1G --name tmppilot tmppilot /bin/sh -c
+  CI_RUN: docker run -v ../openpilot:/tmp/openpilot -e GITHUB_ACTION -e GITHUB_REF -e GITHUB_HEAD_REF -e GITHUB_SHA -e GITHUB_REPOSITORY -e GITHUB_RUN_ID --rm tmppilotci /bin/bash -c
   UNIT_TEST: coverage run --append -m unittest discover
   REGISTRY_BASE: ghcr.io/commaai/openpilot
   DOCKER_LOGIN: docker login ghcr.io -u adeebshihadeh -p ${{ secrets.CONTAINER_TOKEN }}
   BUILD: |
-      docker pull $(grep -ioP '(?<=^from)\s+\S+' Dockerfile.openpilot_base) || true
+      docker pull $(grep -iohP '(?<=^from)\s+\S+' Dockerfile*) || true
       docker pull $REGISTRY_BASE/openpilot-base:latest || true
-      docker build --cache-from $REGISTRY_BASE/openpilot-base:latest -t commaai/openpilot-base:latest -f Dockerfile.openpilot_base .
-
-      docker pull $REGISTRY_BASE/openpilotci:latest || true
-      docker build --cache-from $REGISTRY_BASE/openpilotci:latest -t tmppilot -f Dockerfile.openpilotci .
+      docker build --cache-from $REGISTRY_BASE/openpilot-base:latest -t tmppilot -f Dockerfile.openpilot_base .
 
 jobs:
   build_release:
@@ -89,7 +86,7 @@ jobs:
         submodules: true
     - name: Build Docker image
       run: |
-        docker pull $REGISTRY_BASE/openpilotwebcamci:latest
+        docker pull $REGISTRY_BASE/openpilotwebcamci:latest || true
         docker build --cache-from $REGISTRY_BASE/openpilotwebcamci:latest -t tmppilotwebcam -f tools/webcam/Dockerfile .
     - name: Build openpilot
       run: docker run --shm-size 1G --rm tmppilotwebcam /bin/sh -c "cd /tmp/openpilot && USE_WEBCAM=1 scons -j$(nproc)"
