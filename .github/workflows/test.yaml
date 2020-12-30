@@ -6,17 +6,20 @@ on:
   pull_request:
 
 env:
-  RUN: docker run -v ../openpilot:/tmp/openpilot --shm-size 1G --rm tmppilot /bin/sh -c
-  PERSIST_WITH_CACHE: docker run --shm-size 1G -v ../openpilot:/tmp/openpilot -v /tmp/comma_download_cache:/tmp/comma_download_cache  --name tmppilot tmppilot /bin/sh -c
-  PERSIST: docker run -v ../openpilot:/tmp/openpilot --shm-size 1G --name tmppilot tmppilot /bin/sh -c
-  CI_RUN: docker run -v ../openpilot:/tmp/openpilot -e GITHUB_ACTION -e GITHUB_REF -e GITHUB_HEAD_REF -e GITHUB_SHA -e GITHUB_REPOSITORY -e GITHUB_RUN_ID --rm tmppilotci /bin/bash -c
-  UNIT_TEST: coverage run --append -m unittest discover
+  BASE_IMAGE: openpilot-base
   REGISTRY_BASE: ghcr.io/commaai/openpilot
   DOCKER_LOGIN: docker login ghcr.io -u adeebshihadeh -p ${{ secrets.CONTAINER_TOKEN }}
   BUILD: |
       docker pull $(grep -iohP '(?<=^from)\s+\S+' Dockerfile*) || true
-      docker pull $REGISTRY_BASE/openpilot-base:latest || true
-      docker build --cache-from $REGISTRY_BASE/openpilot-base:latest -t tmppilot -f Dockerfile.openpilot_base .
+      docker pull $REGISTRY_BASE/$BASE_IMAGE:latest || true
+      docker build --cache-from $REGISTRY_BASE/$BASE_IMAGE:latest -t $BASE_IMAGE -f Dockerfile.openpilot_base .
+
+  RUN_COMMON: docker run --shm-size 1G -v ../openpilot:/tmp/openpilot -e PYTHONPATH /tmp/openpilot -e GITHUB_ACTION -e GITHUB_REF -e GITHUB_HEAD_REF -e GITHUB_SHA -e GITHUB_REPOSITORY -e GITHUB_RUN_ID
+  RUN: $RUN_COMMON --rm $BASE_IMAGE /bin/sh -c
+  PERSIST_WITH_CACHE: $RUN_COMMON -v /tmp/comma_download_cache:/tmp/comma_download_cache --name tmppilot tmppilot /bin/sh -c
+  PERSIST: $RUN_COMMON --name tmppilot tmppilot /bin/sh -c
+  CI_RUN: $RUN_COMMON --rm tmppilotci /bin/bash -c
+  UNIT_TEST: coverage run --append -m unittest discover
 
 jobs:
   build_release:
@@ -80,22 +83,23 @@ jobs:
     name: build webcam
     runs-on: ubuntu-20.04
     timeout-minutes: 90
+    env:
+      IMAGE_NAME: openpilotwebcamci
     steps:
     - uses: actions/checkout@v2
       with:
         submodules: true
     - name: Build Docker image
       run: |
-        docker pull $REGISTRY_BASE/openpilotwebcamci:latest || true
-        docker build --cache-from $REGISTRY_BASE/openpilotwebcamci:latest -t tmppilotwebcam -f tools/webcam/Dockerfile .
+        docker pull $REGISTRY_BASE/$IMAGE_NAME:latest || true
+        docker build --cache-from $REGISTRY_BASE/$IMAGE_NAME:latest -t $IMAGE_NAME:latest -f tools/webcam/Dockerfile .
     - name: Build openpilot
-      run: docker run --shm-size 1G --rm tmppilotwebcam /bin/sh -c "cd /tmp/openpilot && USE_WEBCAM=1 scons -j$(nproc)"
+      run: docker run --shm-size 1G --rm $IMAGE_NAME /bin/sh -c "cd /tmp/openpilot && USE_WEBCAM=1 scons -j$(nproc)"
     - name: Push to container registry
       #if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request' && github.repository == 'commaai/openpilot'
       run: |
-          $DOCKER_LOGIN
-          docker tag tmppilotwebcam $REGISTRY_BASE/openpilotwebcamci:latest
-          docker push $REGISTRY_BASE/openpilotwebcamci:latest
+        $DOCKER_LOGIN
+        docker push $REGISTRY_BASE/$IMAGE_NAME:latest
 
   docker_push:
     name: docker push
@@ -112,11 +116,9 @@ jobs:
       - name: Push to container registry
         run: |
           $DOCKER_LOGIN
-          docker tag commaai/openpilot-base:latest $REGISTRY_BASE/openpilot-base:latest
-          docker push $REGISTRY_BASE/openpilot-base:latest
-          docker tag tmppilot $REGISTRY_BASE/openpilotci:latest
-          docker push $REGISTRY_BASE/openpilotci:latest
+          docker push $REGISTRY_BASE/$BASE_IMAGE:latest
 
+  # TODO: move this to github container registry
   docker_push_prebuilt:
     name: docker push prebuilt
     runs-on: ubuntu-20.04
