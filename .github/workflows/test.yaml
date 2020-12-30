@@ -15,10 +15,10 @@ env:
       docker build --cache-from $REGISTRY_BASE/$BASE_IMAGE:latest -t $BASE_IMAGE -f Dockerfile.openpilot_base .
 
   RUN_COMMON: docker run --shm-size 1G -v ../openpilot:/tmp/openpilot -e PYTHONPATH /tmp/openpilot -e GITHUB_ACTION -e GITHUB_REF -e GITHUB_HEAD_REF -e GITHUB_SHA -e GITHUB_REPOSITORY -e GITHUB_RUN_ID
-  RUN: $RUN_COMMON --rm $BASE_IMAGE /bin/sh -c
-  PERSIST_WITH_CACHE: $RUN_COMMON -v /tmp/comma_download_cache:/tmp/comma_download_cache --name tmppilot tmppilot /bin/sh -c
-  PERSIST: $RUN_COMMON --name tmppilot tmppilot /bin/sh -c
-  CI_RUN: $RUN_COMMON --rm tmppilotci /bin/bash -c
+  RUN: eval "$RUN_COMMON" --rm $BASE_IMAGE /bin/sh -c
+  PERSIST_WITH_CACHE: eval "$RUN_COMMON" -v /tmp/comma_download_cache:/tmp/comma_download_cache --name tmppilot tmppilot /bin/sh -c
+  PERSIST: eval "$RUN_COMMON" --name tmppilot tmppilot /bin/sh -c
+  CI_RUN: eval "$RUN_COMMON" --rm tmppilotci /bin/bash -c
   UNIT_TEST: coverage run --append -m unittest discover
 
 jobs:
